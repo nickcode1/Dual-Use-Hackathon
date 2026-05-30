@@ -1,6 +1,6 @@
 """
-Airport Runway 3D Automated Detection Simulation
------------------------------------------
+Airport Runway 3D Automated Detection Simulation - Enhanced Edition
+-------------------------------------------------------------------
 An automated airfield monitoring system. Perimeter towers scan for 
 incoming/outgoing commercial flights and biological hazards (birds).
 
@@ -23,68 +23,66 @@ import pygame
 # ---------------------------------------------------------------------------
 WIDTH, HEIGHT = 1024, 768
 FPS = 60
-TITLE = "3D Airfield Automated Detection"
+TITLE = "3D Airfield Detection - Enhanced"
 
 # World
 GROUND_Y = 0
 GND_X0, GND_X1 = -250, 250
-GND_Z0, GND_Z1 = -100, 300
+GND_Z0, GND_Z1 = -100, 400
 
 RW_CX = 0
-RW_HW = 20
+RW_HW = 25
 RW_THRESH_Z = 0
-RW_FAR_Z = -300
+RW_FAR_Z = -350
 
-# Perimeter Towers (Left and Right flanks)
+# Perimeter Towers
 TOWER_POSITIONS = [
-    (-120, GROUND_Y, 200), (120, GROUND_Y, 200),
-    (-120, GROUND_Y, -50), (120, GROUND_Y, -50),
-    (-120, GROUND_Y, -280), (120, GROUND_Y, -280)
+    (-140, GROUND_Y, 250), (140, GROUND_Y, 250),
+    (-140, GROUND_Y, -50), (140, GROUND_Y, -50),
+    (-140, GROUND_Y, -300), (140, GROUND_Y, -300)
 ]
-TOWER_HEIGHT = -40  # Negative is UP in this coordinate system
+TOWER_HEIGHT = -50
 
-# Colors
-C_SKY        = (20, 25, 35)      # Darker sky for better visibility of tracking lines
-C_GROUND     = (35, 45, 40)
-C_GROUND_LN  = (50, 65, 55)
-C_RUNWAY     = (45, 45, 50)
-C_STRIPE     = (200, 200, 200)
-C_TOWER      = (150, 150, 160)
-C_BIRD       = (40, 200, 150)
-C_PLANE      = (220, 220, 230)
-C_DETECT     = (255, 100, 50)
-C_LINE_BIRD  = (255, 150, 50)
-C_LINE_PLANE = (50, 180, 255)
-C_HUD_TXT    = (200, 200, 200)
+# Colors (Dusk/Night Theme)
+C_SKY        = (12, 16, 24)
+C_GROUND     = (22, 28, 26)
+C_GROUND_LN  = (32, 42, 38)
+C_RUNWAY     = (35, 38, 42)
+C_STRIPE     = (200, 200, 210)
+C_RWY_LIGHT  = (255, 240, 150)
+C_TOWER_BASE = (80, 85, 95)
+C_TOWER_CAB  = (180, 180, 190)
+C_BIRD       = (40, 220, 150)
+C_PLANE      = (240, 240, 255)
+C_DETECT     = (255, 80, 40)
+C_LINE_BIRD  = (255, 180, 50)
+C_LINE_PLANE = (40, 160, 255)
+C_HUD_TXT    = (220, 220, 220)
 
 # ---------------------------------------------------------------------------
 # 3D Camera Engine
 # ---------------------------------------------------------------------------
 class Camera:
     def __init__(self):
-        self.rot_x = 0.6   # pitch
-        self.rot_y = -0.3  # yaw
+        self.rot_x = 0.5   # pitch
+        self.rot_y = -0.25 # yaw
         self.scale = 1.0
         self.cx = WIDTH // 2
         self.cy = HEIGHT // 2
-        self.z_off = 500   # Distance of camera from center
+        self.z_off = 600
 
     def project(self, x, y, z):
-        # Rotate around Y axis (Yaw)
         cy, sy = math.cos(self.rot_y), math.sin(self.rot_y)
         rx = x * cy + z * sy
         rz = -x * sy + z * cy
 
-        # Rotate around X axis (Pitch)
         cx, sx = math.cos(self.rot_x), math.sin(self.rot_x)
         ry = y * cx - rz * sx
         rz2 = y * sx + rz * cx
 
-        # Perspective division
-        fov = 700 * self.scale
+        fov = 800 * self.scale
         denom = rz2 + self.z_off
         
-        # Prevent division by zero or negative rendering (behind camera)
         visible = denom > 10 
         if denom < 0.1: denom = 0.1
         
@@ -101,12 +99,13 @@ class Tower:
     def __init__(self, x, y, z):
         self.x, self.y, self.z = x, y, z
         self.pulse = random.uniform(0, math.pi * 2)
+        self.radar_angle = random.uniform(0, math.pi * 2)
 
     def update(self):
-        self.pulse += 0.05
+        self.pulse += 0.04
+        self.radar_angle += 0.08
 
     def in_range(self, entity, radius):
-        # Distance measured from the top of the tower
         dx = self.x - entity.x
         dy = (self.y + TOWER_HEIGHT) - entity.y
         dz = self.z - entity.z
@@ -114,14 +113,13 @@ class Tower:
 
 class Bird:
     def __init__(self):
-        # Spawn randomly off-screen left or right
         side = random.choice([-1, 1])
         self.x = side * 400
-        self.y = random.uniform(-100, -20)
-        self.z = random.uniform(-200, 200)
-        self.vx = -side * random.uniform(1.5, 3.0)
-        self.vy = random.uniform(-0.5, 0.5)
-        self.vz = random.uniform(-1.0, 1.0)
+        self.y = random.uniform(-120, -20)
+        self.z = random.uniform(-250, 250)
+        self.vx = -side * random.uniform(1.2, 2.5)
+        self.vy = random.uniform(-0.3, 0.3)
+        self.vz = random.uniform(-0.8, 0.8)
         self.wphase = random.uniform(0, math.pi * 2)
         self.active = True
 
@@ -129,12 +127,9 @@ class Bird:
         self.x += self.vx * speed_mult
         self.y += self.vy * speed_mult
         self.z += self.vz * speed_mult
-        self.wphase += 0.15 * speed_mult
+        self.wphase += 0.12 * speed_mult
+        self.y += math.sin(self.wphase) * 0.15
         
-        # Flocking bob
-        self.y += math.sin(self.wphase) * 0.2
-        
-        # Despawn if out of bounds
         if abs(self.x) > 500 or abs(self.z) > 500:
             self.active = False
 
@@ -145,36 +140,35 @@ class Plane:
         self.x = RW_CX
         
         if mode == "landing":
-            self.z = GND_Z1 + 400
+            self.z = GND_Z1 + 450
             self.y = -150
-            self.vz = -2.5
-        else: # takeoff
+            # LOWERED SPEED: Was -2.5, now -1.0
+            self.vz = -1.0 
+        else:
             self.z = RW_FAR_Z - 50
-            self.y = GROUND_Y - 4
-            self.vz = 2.5
+            self.y = GROUND_Y - 5
+            # LOWERED SPEED: Was 2.5, now 1.0
+            self.vz = 1.0
 
     def update(self, speed_mult):
         s = speed_mult * 1.5
         self.z += self.vz * s
 
         if self.mode == "landing":
-            # Glide slope
-            if self.z > RW_THRESH_Z + 20:
-                self.y += 0.6 * s
+            if self.z > RW_THRESH_Z + 15:
+                # Flatter glide slope to match slower speed
+                self.y += 0.31 * s 
             else:
-                self.y = GROUND_Y - 4 # Touchdown
-            
+                self.y = GROUND_Y - 5 
             if self.z < RW_FAR_Z - 100:
                 self.active = False
         else:
-            # Takeoff
-            if self.z > RW_THRESH_Z - 100:
-                self.y -= 0.8 * s # Pitch up
-                
-            if self.z > GND_Z1 + 400:
+            if self.z > RW_THRESH_Z - 80:
+                self.y -= 0.35 * s 
+            if self.z > GND_Z1 + 450:
                 self.active = False
                 
-        self.y = min(GROUND_Y - 4, self.y)
+        self.y = min(GROUND_Y - 5, self.y)
 
 # ---------------------------------------------------------------------------
 # Rendering Helpers
@@ -187,33 +181,32 @@ def draw_line_3d(surf, cam, p1, p2, color, width=1):
 
 def draw_poly_3d(surf, cam, pts3d, color, outline=None):
     projected = [cam.project(*pt) for pt in pts3d]
-    if all(p[4] for p in projected): # if all vertices visible
+    if all(p[4] for p in projected):
         pts2d = [(int(p[0]), int(p[1])) for p in projected]
         pygame.draw.polygon(surf, color, pts2d)
         if outline:
             pygame.draw.polygon(surf, outline, pts2d, 1)
 
-def draw_wire_sphere(surf, cam, cx, cy, cz, r, color, segs=16):
-    for i in range(segs):
+def draw_circle_3d(surf, cam, cx, cy, cz, r, color, width=1, segs=20):
+    pts = []
+    for i in range(segs + 1):
         angle = (i / segs) * math.pi * 2
-        # Horizontal circle
-        p1 = (cx + math.cos(angle)*r, cy, cz + math.sin(angle)*r)
-        p2 = (cx + math.cos(angle + 0.5)*r, cy, cz + math.sin(angle + 0.5)*r)
-        draw_line_3d(surf, cam, p1, p2, color, 1)
+        pts.append((cx + math.cos(angle)*r, cy, cz + math.sin(angle)*r))
+    for i in range(len(pts)-1):
+        draw_line_3d(surf, cam, pts[i], pts[i+1], color, width)
 
 # ---------------------------------------------------------------------------
 # Environment Drawing
 # ---------------------------------------------------------------------------
 def draw_ground_and_runway(surf, cam):
     # Base ground
-    corners = [
+    draw_poly_3d(surf, cam, [
         (GND_X0, GROUND_Y, GND_Z0), (GND_X1, GROUND_Y, GND_Z0),
-        (GND_X1, GROUND_Y, GND_Z1), (GND_X0, GROUND_Y, GND_Z1),
-    ]
-    draw_poly_3d(surf, cam, corners, C_GROUND, C_GROUND_LN)
+        (GND_X1, GROUND_Y, GND_Z1), (GND_X0, GROUND_Y, GND_Z1)
+    ], C_GROUND, C_GROUND_LN)
 
     # Grid
-    steps = 10
+    steps = 12
     xs = (GND_X1 - GND_X0) / steps
     zs = (GND_Z1 - GND_Z0) / steps
     for i in range(1, steps):
@@ -221,17 +214,39 @@ def draw_ground_and_runway(surf, cam):
         draw_line_3d(surf, cam, (x, GROUND_Y, GND_Z0), (x, GROUND_Y, GND_Z1), C_GROUND_LN)
         draw_line_3d(surf, cam, (GND_X0, GROUND_Y, z), (GND_X1, GROUND_Y, z), C_GROUND_LN)
 
-    # Runway
+    # Runway Base
     Y = GROUND_Y + 0.5
     cx, hw = RW_CX, RW_HW
-    rw_pts = [
+    draw_poly_3d(surf, cam, [
         (cx - hw, Y, RW_FAR_Z), (cx + hw, Y, RW_FAR_Z),
         (cx + hw, Y, GND_Z1 - 20), (cx - hw, Y, GND_Z1 - 20)
-    ]
-    draw_poly_3d(surf, cam, rw_pts, C_RUNWAY)
-    
-    # Threshold Line
-    draw_line_3d(surf, cam, (cx - hw, Y, RW_THRESH_Z), (cx + hw, Y, RW_THRESH_Z), (255, 200, 50), 3)
+    ], C_RUNWAY)
+
+    # Threshold markings (Piano Keys)
+    for i in range(8):
+        ox = cx - hw + 3 + (i * 6)
+        if i == 4: continue # gap in middle
+        draw_poly_3d(surf, cam, [
+            (ox, Y, RW_THRESH_Z - 5), (ox + 4, Y, RW_THRESH_Z - 5),
+            (ox + 4, Y, RW_THRESH_Z + 15), (ox, Y, RW_THRESH_Z + 15)
+        ], C_STRIPE)
+        
+    # Centerline dashes
+    dash_len, dash_gap = 20, 25
+    z_curr = RW_THRESH_Z - dash_gap
+    while z_curr > RW_FAR_Z + 20:
+        draw_line_3d(surf, cam, (cx, Y, z_curr), (cx, Y, z_curr - dash_len), C_STRIPE, 3)
+        z_curr -= (dash_len + dash_gap)
+
+    # Runway Edge Lights
+    z_light = GND_Z1 - 30
+    while z_light > RW_FAR_Z:
+        for lx in [cx - hw - 2, cx + hw + 2]:
+            px, py, _, pf, v = cam.project(lx, Y-1, z_light)
+            if v:
+                rad = max(1, int(pf * 3))
+                pygame.draw.circle(surf, C_RWY_LIGHT, (int(px), int(py)), rad)
+        z_light -= 40
 
 # ---------------------------------------------------------------------------
 # Main Loop
@@ -245,33 +260,29 @@ def main():
 
     cam = Camera()
     towers = [Tower(*pos) for pos in TOWER_POSITIONS]
-    
     entities = []
     
-    # State
-    radius = 120
-    speed = 2
+    radius = 140
+    speed = 1   # Lowered default simulation speed
     paused = False
     spawn_timer = 0
     dragging = False
     last_mouse = (0,0)
 
     while True:
-        # --- Event Handling ---
+        # Event Handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
-            
             if event.type == pygame.KEYDOWN:
                 k = event.key
                 if k == pygame.K_ESCAPE: pygame.quit(); sys.exit()
                 if k == pygame.K_SPACE: paused = not paused
-                if k == pygame.K_r: radius = min(250, radius + 10)
+                if k == pygame.K_r: radius = min(300, radius + 10)
                 if k == pygame.K_f: radius = max(30, radius - 10)
                 if k == pygame.K_s: speed = min(5, speed + 1)
                 if k == pygame.K_d: speed = max(1, speed - 1)
 
-            # Camera Orbit Controls
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 dragging = True
                 last_mouse = event.pos
@@ -282,13 +293,13 @@ def main():
                 dy = event.pos[1] - last_mouse[1]
                 cam.rot_y += dx * 0.005
                 cam.rot_x += dy * 0.005
-                cam.rot_x = max(-0.1, min(1.4, cam.rot_x)) # Clamp pitch
+                cam.rot_x = max(-0.1, min(1.4, cam.rot_x))
                 last_mouse = event.pos
             if event.type == pygame.MOUSEWHEEL:
                 cam.scale *= 0.9 if event.y < 0 else 1.1
                 cam.scale = max(0.3, min(2.5, cam.scale))
 
-        # --- Automation & Logic ---
+        # Automation
         if not paused:
             spawn_timer -= 1
             if spawn_timer <= 0:
@@ -298,71 +309,89 @@ def main():
                 elif choice < 0.5:
                     entities.append(Plane("landing"))
                 else:
-                    # Spawn a flock of birds
-                    flock_size = random.randint(3, 8)
-                    for _ in range(flock_size):
+                    for _ in range(random.randint(4, 10)):
                         entities.append(Bird())
-                spawn_timer = random.randint(60, 180) # Next event in 1-3 seconds
+                spawn_timer = random.randint(90, 240)
 
-            for e in entities:
-                e.update(speed)
-            
-            # Clean up inactive
+            for e in entities: e.update(speed)
             entities = [e for e in entities if e.active]
-            
-            for t in towers:
-                t.update()
+            for t in towers: t.update()
 
-        # --- Rendering ---
+        # Rendering
         surf.fill(C_SKY)
         draw_ground_and_runway(surf, cam)
 
-        bird_dets = 0
-        plane_dets = 0
+        bird_dets = plane_dets = 0
 
-        # Sort all dynamic elements by Z-depth relative to camera
-        # Calculate distance to camera for sorting
+        # Sort dynamic objects by Z-depth
         def get_depth(obj):
-            if isinstance(obj, Tower):
-                _, _, z, _, _ = cam.project(obj.x, obj.y + TOWER_HEIGHT, obj.z)
-                return z
-            else:
-                _, _, z, _, _ = cam.project(obj.x, obj.y, obj.z)
-                return z
+            y_offset = TOWER_HEIGHT if isinstance(obj, Tower) else 0
+            return cam.project(obj.x, obj.y + y_offset, obj.z)[2]
                 
         draw_queue = sorted(towers + entities, key=get_depth, reverse=True)
 
         for obj in draw_queue:
             if isinstance(obj, Tower):
-                # Draw pole
-                draw_line_3d(surf, cam, (obj.x, obj.y, obj.z), (obj.x, obj.y + TOWER_HEIGHT, obj.z), C_TOWER, 3)
-                # Draw sphere
+                # Tapered Base
+                draw_poly_3d(surf, cam, [
+                    (obj.x-4, obj.y, obj.z-4), (obj.x+4, obj.y, obj.z-4),
+                    (obj.x+2, obj.y+TOWER_HEIGHT, obj.z-2), (obj.x-2, obj.y+TOWER_HEIGHT, obj.z-2)
+                ], C_TOWER_BASE)
+                draw_poly_3d(surf, cam, [
+                    (obj.x-4, obj.y, obj.z+4), (obj.x+4, obj.y, obj.z+4),
+                    (obj.x+2, obj.y+TOWER_HEIGHT, obj.z+2), (obj.x-2, obj.y+TOWER_HEIGHT, obj.z+2)
+                ], C_TOWER_BASE)
+                
+                # Cabin & Radar
+                ty = obj.y + TOWER_HEIGHT
+                draw_poly_3d(surf, cam, [
+                    (obj.x-6, ty, obj.z-6), (obj.x+6, ty, obj.z-6),
+                    (obj.x+6, ty, obj.z+6), (obj.x-6, ty, obj.z+6)
+                ], C_TOWER_CAB)
+                
+                rx = obj.x + math.cos(obj.radar_angle) * 8
+                rz = obj.z + math.sin(obj.radar_angle) * 8
+                draw_line_3d(surf, cam, (obj.x, ty-2, obj.z), (rx, ty-6, rz), (200, 200, 200), 2)
+
+                # Detection Sphere
                 pulse_r = radius + math.sin(obj.pulse) * 5
-                alpha_color = (*C_DETECT, max(50, int(abs(math.sin(obj.pulse))*150)))
-                draw_wire_sphere(surf, cam, obj.x, obj.y + TOWER_HEIGHT, obj.z, pulse_r, alpha_color)
+                alpha_c = (*C_DETECT, max(30, int(abs(math.sin(obj.pulse))*120)))
+                draw_circle_3d(surf, cam, obj.x, ty, obj.z, pulse_r, alpha_c, 1, 16)
                 
             elif isinstance(obj, Plane):
-                # Draw Plane
+                # Detailed Swept-wing Aircraft
                 fwd = 15 if obj.mode == "takeoff" else -15
-                nose = (obj.x, obj.y, obj.z + fwd)
-                tail = (obj.x, obj.y, obj.z - fwd)
-                lw = (obj.x - 20, obj.y, obj.z)
-                rw = (obj.x + 20, obj.y, obj.z)
-                vtail = (obj.x, obj.y - 10, obj.z - fwd)
+                pitch = 3 if (obj.mode == "takeoff" and obj.y < GROUND_Y - 10) else 0
                 
-                draw_line_3d(surf, cam, nose, tail, C_PLANE, 5)
-                draw_line_3d(surf, cam, lw, rw, C_PLANE, 4)
-                draw_line_3d(surf, cam, tail, vtail, C_PLANE, 3)
+                # Fuselage
+                nose = (obj.x, obj.y - pitch, obj.z + fwd * 1.8)
+                tail = (obj.x, obj.y + pitch, obj.z - fwd * 1.5)
+                draw_line_3d(surf, cam, nose, tail, C_PLANE, 6)
+                
+                # Main Wings (Swept back)
+                lw_tip = (obj.x - 30, obj.y, obj.z - fwd * 0.4)
+                rw_tip = (obj.x + 30, obj.y, obj.z - fwd * 0.4)
+                w_root = (obj.x, obj.y, obj.z + fwd * 0.5)
+                draw_line_3d(surf, cam, w_root, lw_tip, C_PLANE, 4)
+                draw_line_3d(surf, cam, w_root, rw_tip, C_PLANE, 4)
+                
+                # Tail Wings & Vertical Stabilizer
+                lt = (obj.x - 12, obj.y + pitch, obj.z - fwd * 1.4)
+                rt = (obj.x + 12, obj.y + pitch, obj.z - fwd * 1.4)
+                v_tail = (obj.x, obj.y - 12 + pitch, obj.z - fwd * 1.7)
+                draw_line_3d(surf, cam, tail, lt, C_PLANE, 2)
+                draw_line_3d(surf, cam, tail, rt, C_PLANE, 2)
+                draw_line_3d(surf, cam, tail, v_tail, C_PLANE, 3)
                 
             elif isinstance(obj, Bird):
                 px, py, pz, pf, v = cam.project(obj.x, obj.y, obj.z)
                 if v:
-                    sz = max(2, pf * 4)
+                    sz = max(2, pf * 4.5)
                     wing = math.sin(obj.wphase) * sz
                     pygame.draw.line(surf, C_BIRD, (px-sz, py-wing), (px, py), 2)
                     pygame.draw.line(surf, C_BIRD, (px, py), (px+sz, py-wing), 2)
 
-        # Draw Tracking Lines (rendered last so they overlay)
+        # Tracking Lines
         for t in towers:
             tx, ty, tz = t.x, t.y + TOWER_HEIGHT, t.z
             for e in entities:
@@ -374,10 +403,10 @@ def main():
                         bird_dets += 1
                         draw_line_3d(surf, cam, (tx, ty, tz), (e.x, e.y, e.z), C_LINE_BIRD, 1)
 
-        # --- HUD ---
-        hud_bg = pygame.Surface((220, 140), pygame.SRCALPHA)
-        hud_bg.fill((20, 20, 20, 200))
-        surf.blit(hud_bg, (10, 10))
+        # HUD
+        hud_bg = pygame.Surface((230, 140), pygame.SRCALPHA)
+        hud_bg.fill((15, 20, 25, 210))
+        surf.blit(hud_bg, (15, 15))
         
         texts = [
             f"Active Planes: {sum(1 for e in entities if isinstance(e, Plane))}",
@@ -387,10 +416,8 @@ def main():
             f"Range (R/F):   {radius}m",
             f"Speed (S/D):   {speed}x"
         ]
-        
         for i, text in enumerate(texts):
-            img = font.render(text, True, C_HUD_TXT)
-            surf.blit(img, (20, 20 + i * 18))
+            surf.blit(font.render(text, True, C_HUD_TXT), (25, 25 + i * 18))
 
         pygame.display.flip()
         clock.tick(FPS)
