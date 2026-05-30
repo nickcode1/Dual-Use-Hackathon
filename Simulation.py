@@ -48,7 +48,7 @@ class Runway:
         self.z_max = GND_Z1 + 100
 
 
-RUNWAYS = [Runway(-80), Runway(0), Runway(80)]
+RUNWAYS = [Runway(-120), Runway(0), Runway(120)]
 
 # Perimeter Towers (set back from outer runway edges at x = ±105)
 TOWER_X = 210
@@ -190,6 +190,9 @@ class Bird:
         elif self.trail:
             self.trail.pop(0)
 
+# Ground altitude threshold: planes at or near ground level
+AIRBORNE_Y = -18  # y values below this are considered airborne (y is negative-up)
+
 class Plane:
     def __init__(self, mode, runway):
         self.mode = mode
@@ -208,19 +211,27 @@ class Plane:
             self.y = GROUND_Y - 5
             self.vz = 1.0
 
+    def is_airborne(self):
+        """True when the plane is flying rather than rolling on the ground."""
+        return self.y < AIRBORNE_Y
+
     def update(self, speed_mult, entities):
         rw = self.runway
         s = speed_mult * 1.5
         delta_z = self.vz * s
         new_z = self.z + delta_z
 
-        entering_runway = (
-            not plane_on_runway(self)
-            and rw.z_min <= new_z <= rw.z_max
-        )
-        if entering_runway and opposing_traffic_on_runway(entities, self, exclude=self):
-            return
+        # Only block ground-rolling planes from entering an occupied runway.
+        # Airborne planes (landing approach) must never be frozen mid-air.
+        if not self.is_airborne():
+            entering_runway = (
+                not plane_on_runway(self)
+                and rw.z_min <= new_z <= rw.z_max
+            )
+            if entering_runway and opposing_traffic_on_runway(entities, self, exclude=self):
+                return  # Hold at threshold — safe because plane is on the ground
 
+        # Always update position and descent for airborne planes
         self.z = new_z
 
         if self.mode == "landing":
@@ -572,16 +583,16 @@ def main():
                     rw = pick_runway_for_spawn(entities, "takeoff")
                     if rw:
                         entities.append(Plane("takeoff", rw))
-                elif choice < 0.90:
+                elif choice < 0.80:
                     rw = pick_runway_for_spawn(entities, "landing")
                     if rw:
                         entities.append(Plane("landing", rw))
                 else:
                     # Bird spawn: ~8% chance, flock of 1-2 (was 20%, 2-5)
-                    for _ in range(random.randint(1, 3)):
+                    for _ in range(random.randint(2, 4)):
                         entities.append(Bird(random.choice(RUNWAYS)))
 
-                spawn_timer = random.randint(90, 240)
+                spawn_timer = random.randint(150, 350)
 
             for e in entities:
                 if isinstance(e, Plane):
