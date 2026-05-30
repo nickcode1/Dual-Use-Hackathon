@@ -6,11 +6,14 @@ Servo servo2;
 void setup() {
   servo1.attach(9);
   servo2.attach(10);
-
-  servo1.write(45);
-  servo2.write(135);
 }
 
 void loop() {
-  // Nothing needed here
+  servo1.write(45);
+  servo2.write(45);
+  delay(1000);  // wait 1 second
+
+  servo1.write(180);
+  servo2.write(180);
+  delay(1000);  // wait 1 second
 }
