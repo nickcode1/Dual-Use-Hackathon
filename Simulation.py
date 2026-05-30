@@ -23,12 +23,13 @@ import pygame
 # ---------------------------------------------------------------------------
 WIDTH, HEIGHT = 1024, 768
 FPS = 60
-TITLE = "3D Airfield Detection - Enhanced"
+TITLE = "3D Airfield Detection - Enhanced (Spheres & Extended Ground)"
 
 # World
 GROUND_Y = 0
 GND_X0, GND_X1 = -250, 250
-GND_Z0, GND_Z1 = -100, 400
+# EXTENDED GROUND: Z0 was -100, now -450 so it extends past the runway far end
+GND_Z0, GND_Z1 = -450, 400
 
 RW_CX = 0
 RW_HW = 25
@@ -116,7 +117,7 @@ class Bird:
         side = random.choice([-1, 1])
         self.x = side * 400
         self.y = random.uniform(-120, -20)
-        self.z = random.uniform(-250, 250)
+        self.z = random.uniform(-350, 350)
         self.vx = -side * random.uniform(1.2, 2.5)
         self.vy = random.uniform(-0.3, 0.3)
         self.vz = random.uniform(-0.8, 0.8)
@@ -142,12 +143,10 @@ class Plane:
         if mode == "landing":
             self.z = GND_Z1 + 450
             self.y = -150
-            # LOWERED SPEED: Was -2.5, now -1.0
             self.vz = -1.0 
         else:
             self.z = RW_FAR_Z - 50
             self.y = GROUND_Y - 5
-            # LOWERED SPEED: Was 2.5, now 1.0
             self.vz = 1.0
 
     def update(self, speed_mult):
@@ -156,7 +155,6 @@ class Plane:
 
         if self.mode == "landing":
             if self.z > RW_THRESH_Z + 15:
-                # Flatter glide slope to match slower speed
                 self.y += 0.31 * s 
             else:
                 self.y = GROUND_Y - 5 
@@ -187,13 +185,20 @@ def draw_poly_3d(surf, cam, pts3d, color, outline=None):
         if outline:
             pygame.draw.polygon(surf, outline, pts2d, 1)
 
-def draw_circle_3d(surf, cam, cx, cy, cz, r, color, width=1, segs=20):
-    pts = []
+def draw_sphere_3d(surf, cam, cx, cy, cz, r, color, width=1, segs=24):
+    """Draws a 3-axis wireframe sphere."""
+    pts_xz, pts_xy, pts_yz = [], [], []
     for i in range(segs + 1):
         angle = (i / segs) * math.pi * 2
-        pts.append((cx + math.cos(angle)*r, cy, cz + math.sin(angle)*r))
-    for i in range(len(pts)-1):
-        draw_line_3d(surf, cam, pts[i], pts[i+1], color, width)
+        c, s = math.cos(angle), math.sin(angle)
+        pts_xz.append((cx + c*r, cy, cz + s*r))          # Horizontal ring
+        pts_xy.append((cx + c*r, cy + s*r, cz))          # Vertical facing camera
+        pts_yz.append((cx, cy + c*r, cz + s*r))          # Vertical side profile
+        
+    for i in range(segs):
+        draw_line_3d(surf, cam, pts_xz[i], pts_xz[i+1], color, width)
+        draw_line_3d(surf, cam, pts_xy[i], pts_xy[i+1], color, width)
+        draw_line_3d(surf, cam, pts_yz[i], pts_yz[i+1], color, width)
 
 # ---------------------------------------------------------------------------
 # Environment Drawing
@@ -205,13 +210,16 @@ def draw_ground_and_runway(surf, cam):
         (GND_X1, GROUND_Y, GND_Z1), (GND_X0, GROUND_Y, GND_Z1)
     ], C_GROUND, C_GROUND_LN)
 
-    # Grid
-    steps = 12
-    xs = (GND_X1 - GND_X0) / steps
-    zs = (GND_Z1 - GND_Z0) / steps
-    for i in range(1, steps):
-        x, z = GND_X0 + i * xs, GND_Z0 + i * zs
+    # Grid - updated bounds for the extended depth
+    steps_x = 12
+    steps_z = 24
+    xs = (GND_X1 - GND_X0) / steps_x
+    zs = (GND_Z1 - GND_Z0) / steps_z
+    for i in range(1, steps_x):
+        x = GND_X0 + i * xs
         draw_line_3d(surf, cam, (x, GROUND_Y, GND_Z0), (x, GROUND_Y, GND_Z1), C_GROUND_LN)
+    for i in range(1, steps_z):
+        z = GND_Z0 + i * zs
         draw_line_3d(surf, cam, (GND_X0, GROUND_Y, z), (GND_X1, GROUND_Y, z), C_GROUND_LN)
 
     # Runway Base
@@ -263,7 +271,7 @@ def main():
     entities = []
     
     radius = 140
-    speed = 1   # Lowered default simulation speed
+    speed = 1   
     paused = False
     spawn_timer = 0
     dragging = False
@@ -353,10 +361,10 @@ def main():
                 rz = obj.z + math.sin(obj.radar_angle) * 8
                 draw_line_3d(surf, cam, (obj.x, ty-2, obj.z), (rx, ty-6, rz), (200, 200, 200), 2)
 
-                # Detection Sphere
+                # Detection Sphere (Now fully 3D)
                 pulse_r = radius + math.sin(obj.pulse) * 5
                 alpha_c = (*C_DETECT, max(30, int(abs(math.sin(obj.pulse))*120)))
-                draw_circle_3d(surf, cam, obj.x, ty, obj.z, pulse_r, alpha_c, 1, 16)
+                draw_sphere_3d(surf, cam, obj.x, ty, obj.z, pulse_r, alpha_c, 1, 24)
                 
             elif isinstance(obj, Plane):
                 # Detailed Swept-wing Aircraft
