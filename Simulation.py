@@ -568,16 +568,17 @@ def main():
             spawn_timer -= 1
             if spawn_timer <= 0:
                 choice = random.random()
-                if choice < 0.40:
+                if choice < 0.46:
                     rw = pick_runway_for_spawn(entities, "takeoff")
                     if rw:
                         entities.append(Plane("takeoff", rw))
-                elif choice < 0.80:
+                elif choice < 0.90:
                     rw = pick_runway_for_spawn(entities, "landing")
                     if rw:
                         entities.append(Plane("landing", rw))
                 else:
-                    for _ in range(random.randint(2, 5)):
+                    # Bird spawn: ~8% chance, flock of 1-2 (was 20%, 2-5)
+                    for _ in range(random.randint(1, 3)):
                         entities.append(Bird(random.choice(RUNWAYS)))
 
                 spawn_timer = random.randint(90, 240)
