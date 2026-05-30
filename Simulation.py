@@ -526,7 +526,7 @@ def main():
     towers = [Tower(*pos) for pos in TOWER_POSITIONS]
     entities = []
     
-    radius = 140
+    radius = 205
     speed = 1   
     paused = False
     spawn_timer = 0
